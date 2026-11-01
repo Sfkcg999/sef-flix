@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: fusion
+    name: sef-flix
     runtime: node
     plan: free
     buildCommand: "true"
