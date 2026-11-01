@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: fusion
+    runtime: node
+    plan: free
+    buildCommand: "true"
+    startCommand: node server.js
+    envVars:
+      - key: TORBOX_API_KEY
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
