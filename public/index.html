@@ -18,7 +18,7 @@ header h1{color:#e50914;margin:0;font-size:28px;letter-spacing:2px}header input{
 .eps{display:flex;flex-wrap:wrap;gap:6px}.ep{background:#2a2a2a;padding:6px 10px;border-radius:3px;cursor:pointer;font-size:13px}.ep.on{background:#e50914}
 video{width:100%;background:#000;max-height:70vh}
 </style></head><body>
-<header><h1>SEF-FLIX</h1><a onclick="home()" style="cursor:pointer">Home</a><input id=q placeholder="Search movies & shows" onkeydown="if(event.key=='Enter')search(this.value)"></header>
+<header><h1>SEF-FLIX</h1><a onclick="home()" style="cursor:pointer">Home</a><input id=q placeholder="Search movies & shows" onkeydown="if(event.key=='Enter')search(this.value)"></header><a href=/logout style="color:#fff;text-decoration:none;border:1px solid #fff6;padding:6px 12px;border-radius:4px;font-size:14px">Sign out</a>
 <div id=hero></div><div id=rows></div>
 <div id=modal onclick="if(event.target==this)closeM()"><div class=box id=mbox></div></div>
 <script>
