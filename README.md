@@ -1,4 +1,4 @@
-# Fusion
+# SEF-FLIX
 Personal Netflix-style web app: Cinemeta catalogs/posters + TorBox streams (TorBox search API, falls back to Torrentio hashes checked against TorBox cache).
 
 ## Run locally

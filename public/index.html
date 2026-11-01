@@ -1,7 +1,7 @@
-<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Fusion</title>
+<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>SEF-FLIX</title>
 <style>
 body{margin:0;background:#141414;color:#fff;font-family:Helvetica,Arial,sans-serif}
-header{position:fixed;top:0;width:100%;z-index:10;display:flex;align-items:center;gap:20px;padding:14px 4%;box-sizing:border-box;background:linear-gradient(#000c,#0000)}
+header{position:fixed;top:0;width:100%;z-index:10;display:flex;align-items:center;gap:20px;padding:14px 4%;box-sizing:border-box;background:rgba(20,20,20,.95);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid #2a2a2a;box-shadow:0 2px 12px #000a}
 header h1{color:#e50914;margin:0;font-size:28px;letter-spacing:2px}header input{margin-left:auto;background:#000a;border:1px solid #fff6;color:#fff;padding:7px 10px;width:220px}
 #hero{height:70vh;background-size:cover;background-position:center top;position:relative}
 #hero .in{position:absolute;bottom:18%;left:4%;max-width:560px}#hero h2{font-size:46px;margin:0 0 10px}#hero p{text-shadow:0 1px 3px #000;line-height:1.4}
@@ -18,7 +18,7 @@ header h1{color:#e50914;margin:0;font-size:28px;letter-spacing:2px}header input{
 .eps{display:flex;flex-wrap:wrap;gap:6px}.ep{background:#2a2a2a;padding:6px 10px;border-radius:3px;cursor:pointer;font-size:13px}.ep.on{background:#e50914}
 video{width:100%;background:#000;max-height:70vh}
 </style></head><body>
-<header><h1>FUSION</h1><a onclick="home()" style="cursor:pointer">Home</a><input id=q placeholder="Search movies & shows" onkeydown="if(event.key=='Enter')search(this.value)"></header>
+<header><h1>SEF-FLIX</h1><a onclick="home()" style="cursor:pointer">Home</a><input id=q placeholder="Search movies & shows" onkeydown="if(event.key=='Enter')search(this.value)"></header>
 <div id=hero></div><div id=rows></div>
 <div id=modal onclick="if(event.target==this)closeM()"><div class=box id=mbox></div></div>
 <script>

@@ -6,7 +6,7 @@ const crypto=require('crypto');const PASS=(process.env.APP_PASSWORD||fs.readFile
 const SECRET=crypto.createHash('sha256').update('fusion:'+PASS).digest('hex');
 const sign=v=>v+'.'+crypto.createHmac('sha256',SECRET).update(v).digest('hex');
 const authed=req=>{const m=(req.headers.cookie||'').match(/fsess=([^;]+)/);if(!m)return false;const [exp]=m[1].split('.');return sign(exp)===m[1]&&+exp>Date.now();};
-const LOGIN=e=>`<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><body style="background:#141414;color:#fff;font-family:Arial;display:flex;justify-content:center;align-items:center;height:100vh;margin:0"><form method=post action=/login style="background:#000a;padding:40px;border-radius:8px;width:280px"><h1 style="color:#e50914">FUSION</h1>${e?'<p style=color:#e87c03>Wrong password</p>':''}<input type=password name=p placeholder=Password autofocus style="width:100%;padding:12px;margin:10px 0;box-sizing:border-box;background:#333;border:0;color:#fff"><button style="width:100%;padding:12px;background:#e50914;color:#fff;border:0;font-weight:bold">Sign In</button></form>`;
+const LOGIN=e=>`<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><body style="background:#141414;color:#fff;font-family:Arial;display:flex;justify-content:center;align-items:center;height:100vh;margin:0"><form method=post action=/login style="background:#000a;padding:40px;border-radius:8px;width:280px"><h1 style="color:#e50914">SEF-FLIX</h1>${e?'<p style=color:#e87c03>Wrong password</p>':''}<input type=password name=p placeholder=Password autofocus style="width:100%;padding:12px;margin:10px 0;box-sizing:border-box;background:#333;border:0;color:#fff"><button style="width:100%;padding:12px;background:#e50914;color:#fff;border:0;font-weight:bold">Sign In</button></form>`;
 async function j(url,opt={},ttl=0){if(ttl&&cache.has(url)&&cache.get(url).t>Date.now())return cache.get(url).v;
  const r=await fetch(url,{redirect:'follow',...opt,signal:AbortSignal.timeout(20000)});const v=await r.json();if(ttl)cache.set(url,{v,t:Date.now()+ttl});return v;}
 const auth={headers:{Authorization:'Bearer '+KEY}};
@@ -68,4 +68,4 @@ http.createServer(async(req,res)=>{const u=new URL(req.url,'http://x');const q=O
   if(p.startsWith(path.join(__dirname,'public'))&&fs.existsSync(p)){res.writeHead(200,{'content-type':p.endsWith('.html')?'text/html':'text/plain'});return fs.createReadStream(p).pipe(res);}
   res.writeHead(404);res.end();
  }catch(err){send(res,500,{error:String(err.message||err)});}
-}).listen(PORT,'0.0.0.0',()=>console.log('Fusion on '+PORT));
+}).listen(PORT,'0.0.0.0',()=>console.log('SEF-FLIX on '+PORT));
