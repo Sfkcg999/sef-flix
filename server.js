@@ -60,7 +60,7 @@ async function play(K,hash,s,e,file,ip){const auth=H(K);
  if(file){const f=files.find(f=>f.short_name==file);if(f)files=[f];}
  if(s){const p=new RegExp(`s0?${s}[ ._-]?e0?${e}(?!\\d)|${s}x0?${e}(?!\\d)`,'i');const m=files.filter(f=>p.test(f.name));if(m.length)files=m;}
  files.sort((a,b)=>b.size-a.size);const f=files[0];if(!f)return{status:'nofile',detail:'No video file found yet'};
- const r=await j(`${TB}/torrents/requestdl?token=${encodeURIComponent(K)}&torrent_id=${t.id}&file_id=${f.id}&redirect=false&append_name=true${ip?'&user_ip='+encodeURIComponent(ip):''}`);
+ const r=await j(`${TB}/torrents/requestdl?token=${encodeURIComponent(K)}&torrent_id=${t.id}&file_id=${f.id}&redirect=false`);
  if(!r.success)throw new Error(r.detail);
  return{status:'ok',url:r.data,name:f.short_name,mime:f.mimetype,tid:t.id,fid:f.id};
 }
@@ -86,7 +86,7 @@ http.createServer(async(req,res)=>{const u=new URL(req.url,'http://x');const q=O
   if(u.pathname=='/api/play')return send(res,200,await play(K,q.hash,q.s,q.e,q.file,IP));
   if(u.pathname=='/api/library'){const r=await j(`${TB}/torrents/mylist?bypass_cache=true`,H(K));
    return send(res,200,{items:(r.data||[]).map(t=>({id:t.id,hash:t.hash,name:t.name,size:t.size,state:t.download_state,ready:t.download_present,files:(t.files||[]).filter(f=>VID.test(f.name)).map(f=>({id:f.id,name:f.short_name,size:f.size}))}))});}
-  if(u.pathname=='/api/libplay'){const r=await j(`${TB}/torrents/requestdl?token=${encodeURIComponent(K)}&torrent_id=${q.tid}&file_id=${q.fid}&redirect=false&append_name=true${IP?'&user_ip='+encodeURIComponent(IP):''}`);return send(res,200,{status:r.success?'ok':'err',url:r.data,detail:r.detail,tid:q.tid,fid:q.fid});}
+  if(u.pathname=='/api/libplay'){const r=await j(`${TB}/torrents/requestdl?token=${encodeURIComponent(K)}&torrent_id=${q.tid}&file_id=${q.fid}&redirect=false`);return send(res,200,{status:r.success?'ok':'err',url:r.data,detail:r.detail,tid:q.tid,fid:q.fid});}
   if(u.pathname=='/api/hls'){const r=await j(`${TB}/stream/createstream?id=${encodeURIComponent(q.tid)}&file_id=${encodeURIComponent(q.fid)}&type=torrent&chosen_audio_index=0&chosen_resolution_index=0`,H(K));
    return send(res,200,r.success&&r.data?.hls_url?{ok:true,hls:r.data.hls_url}:{ok:false,detail:r.detail||r.error||'Streaming unavailable'});}
   const p=path.join(__dirname,'public',u.pathname=='/'?'index.html':path.normalize(u.pathname));
