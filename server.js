@@ -15,23 +15,37 @@ async function j(url,opt={},ttl=0){if(ttl&&cache.has(url)&&cache.get(url).t>Date
 const H=k=>({headers:{Authorization:'Bearer '+k}});
 const VID=/\.(mkv|mp4|avi|m4v|webm|mov|ts)$/i;
 const qual=s=>(s.match(/2160p|4k|1080p|720p|480p/i)||['?'])[0].toUpperCase().replace('4K','2160P');
-async function streams(K,type,id,s,e){const auth=H(K);
- let list=[];
- try{const q=s?`?season=${s}&episode=${e}&check_cache=true&check_owned=true`:'?check_cache=true&check_owned=true';
-  const r=await j(`https://search-api.torbox.app/torrents/imdb:${id}${q}`,auth);
-  list=(r.data?.torrents||[]).map(t=>({hash:t.hash,title:t.raw_title||t.title,size:t.size,seeders:t.last_known_seeders,cached:!!t.cached,source:'TorBox Search'}));
- }catch(err){}
- if(!list.length){const sid=s?`${id}:${s}:${e}`:id;
-  const r=await j(`https://torrentio.strem.fun/stream/${type}/${sid}.json`,{},600000);
-  list=(r.streams||[]).map(x=>{const lines=x.title.split('\n');const m=x.title.match(/💾 ([\d.]+) (GB|MB)/);const sd=x.title.match(/👤 (\d+)/);
-   return{hash:x.infoHash,title:lines[0],file:x.behaviorHints?.filename,size:m?parseFloat(m[1])*(m[2]=='GB'?1e9:1e6):0,seeders:sd?+sd[1]:0,source:'Torrentio→TorBox'}});
-  const hashes=[...new Set(list.map(x=>x.hash))].slice(0,100);
-  if(hashes.length){const c=await j(`${TB}/torrents/checkcached?format=list&hash=${hashes.join(',')}`,auth);
-   const set=new Set((c.data||[]).map(d=>d.hash));list.forEach(x=>x.cached=set.has(x.hash));}
- }
- list.forEach(x=>x.quality=qual(x.title+' '+(x.file||'')));
+const BUILTIN={torrentio:{name:'Torrentio',url:'https://torrentio.strem.fun'},torrentsdb:{name:'TorrentsDB',url:'https://torrentsdb.com'},peerflix:{name:'Peerflix',url:'https://peerflix.mov'},mediafusion:{name:'MediaFusion',url:'https://mediafusion.elfhosted.com'}};
+const DEFAULT_SRC=['tbsearch','torrentio','torrentsdb','peerflix'];
+const dns=require('dns').promises,net=require('net');
+const privIP=ip=>{if(net.isIPv6(ip)){ip=ip.toLowerCase();if(ip.startsWith('::ffff:'))ip=ip.slice(7);else return ip=='::1'||ip=='::'||/^f[cd]|^fe[89ab]/.test(ip);}
+ const [a,b]=ip.split('.').map(Number);return a==10||a==127||a==0||(a==169&&b==254)||(a==172&&b>=16&&b<=31)||(a==192&&b==168)||(a==100&&b>=64&&b<=127)||a>=224;};
+async function safeBase(raw){let u;try{u=new URL(String(raw).trim())}catch{throw new Error('Invalid URL')}
+ if(u.protocol!=='https:')throw new Error('Only https:// addon URLs are allowed');if(u.username||u.password)throw new Error('No credentials in URL');
+ const addrs=await dns.lookup(u.hostname,{all:true});if(!addrs.length||addrs.some(x=>privIP(x.address)))throw new Error('Address not allowed');
+ return (u.origin+u.pathname).replace(/\/manifest\.json$/,'').replace(/\/+$/,'');}
+async function addonStreams(base,label,type,sid){
+ const r=await fetch(`${base}/stream/${type}/${sid}.json`,{redirect:'error',signal:AbortSignal.timeout(8000)});
+ if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();
+ return(d.streams||[]).filter(x=>/^[a-f0-9]{40}$/i.test(x.infoHash||'')).map(x=>{const t=(x.title||x.description||'');const lines=t.split('\n');
+  const m=t.match(/💾 ?([\d.]+) ?(GB|MB|TB)/i);const sd=t.match(/👤 ?(\d+)/);const bh=x.behaviorHints||{};
+  return{hash:x.infoHash.toLowerCase(),title:lines[0]||x.name,file:bh.filename,size:bh.videoSize||(m?parseFloat(m[1])*({tb:1e12,gb:1e9,mb:1e6}[m[2].toLowerCase()]):0),seeders:sd?+sd[1]:0,sources:[label],cached:false,qhint:x.name||''}});}
+async function streams(K,type,id,s,e,srcs,custom){const auth=H(K);srcs=srcs||DEFAULT_SRC;const sid=s?`${id}:${s}:${e}`:id;
+ const jobs=[],status={};
+ if(srcs.includes('tbsearch'))jobs.push(['TorBox Search',(async()=>{const q=s?`?season=${s}&episode=${e}&check_cache=true`:'?check_cache=true';
+  const r=await fetch(`https://search-api.torbox.app/torrents/imdb:${id}${q}`,{...auth,signal:AbortSignal.timeout(8000)}).then(r=>r.json());
+  return(r.data?.torrents||[]).map(t=>({hash:String(t.hash).toLowerCase(),title:t.raw_title||t.title,size:t.size||0,seeders:t.last_known_seeders||0,cached:!!t.cached,sources:['TorBox Search']}));})()]);
+ for(const k of srcs)if(BUILTIN[k])jobs.push([BUILTIN[k].name,addonStreams(BUILTIN[k].url,BUILTIN[k].name,type,sid)]);
+ for(const c of (custom||[]).slice(0,10))jobs.push([c.label,safeBase(c.url).then(b=>addonStreams(b,c.label,type,sid))]);
+ const res=await Promise.allSettled(jobs.map(x=>x[1]));const map=new Map();
+ res.forEach((r,i)=>{const n=jobs[i][0];status[n]=r.status=='fulfilled'?r.value.length:'error: '+String(r.reason?.message||r.reason).slice(0,80);
+  if(r.status=='fulfilled')for(const x of r.value){const o=map.get(x.hash);if(o){o.sources=[...new Set([...o.sources,...x.sources])];o.seeders=Math.max(o.seeders,x.seeders);o.size=o.size||x.size;o.file=o.file||x.file;o.cached=o.cached||x.cached}else map.set(x.hash,x)}});
+ const list=[...map.values()];const hashes=list.map(x=>x.hash);
+ for(let i=0;i<hashes.length;i+=100){try{const c=await j(`${TB}/torrents/checkcached?format=list&hash=${hashes.slice(i,i+100).join(',')}`,auth);
+  const set=new Set((c.data||[]).map(d=>String(d.hash).toLowerCase()));list.forEach(x=>{if(set.has(x.hash))x.cached=true})}catch{}}
+ list.forEach(x=>{x.quality=qual(x.title+' '+(x.file||'')+' '+(x.qhint||''));delete x.qhint;x.source=x.sources.join(', ')});
  list.sort((a,b)=>(b.cached-a.cached)||(b.seeders-a.seeders));
- return list;
+ return{streams:list,status};
 }
 async function play(K,hash,s,e,file){const auth=H(K);
  const my=await j(`${TB}/torrents/mylist?bypass_cache=true`,auth);
@@ -64,7 +78,11 @@ http.createServer(async(req,res)=>{const u=new URL(req.url,'http://x');const q=O
    return send(res,200,await j(`${CM}/catalog/${q.type}/${q.id||'top'}${ex}.json`,{},3600000));}
   if(u.pathname=='/api/search')return send(res,200,{movie:(await j(`${CM}/catalog/movie/top/search=${encodeURIComponent(q.q)}.json`,{},600000)).metas,series:(await j(`${CM}/catalog/series/top/search=${encodeURIComponent(q.q)}.json`,{},600000)).metas});
   if(u.pathname=='/api/meta')return send(res,200,await j(`${CM}/meta/${q.type}/${q.id}.json`,{},3600000));
-  if(u.pathname=='/api/streams')return send(res,200,{streams:await streams(K,q.type,q.id,q.s,q.e)});
+  if(u.pathname=='/api/streams'){const srcs=q.src!=null?q.src.split(',').filter(Boolean):null;let custom=[];try{custom=JSON.parse(q.addons||'[]').filter(c=>c&&typeof c.url=='string').map((c,i)=>({url:c.url,label:String(c.label||'Custom '+(i+1)).slice(0,40)}))}catch{}
+   return send(res,200,await streams(K,q.type,q.id,q.s,q.e,srcs,custom));}
+  if(u.pathname=='/api/sources')return send(res,200,{builtin:[{id:'tbsearch',name:'TorBox Search'},...Object.entries(BUILTIN).map(([id,v])=>({id,name:v.name}))],defaults:DEFAULT_SRC});
+  if(u.pathname=='/api/validate-addon'){try{const b=await safeBase(q.url);const m=await fetch(b+'/manifest.json',{redirect:'error',signal:AbortSignal.timeout(8000)}).then(r=>r.json());
+   return send(res,200,{ok:true,base:b,name:m.name||new URL(b).hostname,stream:(m.resources||[]).some(r=>r=='stream'||r?.name=='stream')});}catch(e){return send(res,200,{ok:false,error:String(e.message||e)})}}
   if(u.pathname=='/api/play')return send(res,200,await play(K,q.hash,q.s,q.e,q.file));
   if(u.pathname=='/api/library'){const r=await j(`${TB}/torrents/mylist?bypass_cache=true`,H(K));
    return send(res,200,{items:(r.data||[]).map(t=>({id:t.id,hash:t.hash,name:t.name,size:t.size,state:t.download_state,ready:t.download_present,files:(t.files||[]).filter(f=>VID.test(f.name)).map(f=>({id:f.id,name:f.short_name,size:f.size}))}))});}
