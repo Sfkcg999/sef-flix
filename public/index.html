@@ -19,7 +19,7 @@ header h1{color:#e50914;margin:0;font-size:28px;letter-spacing:2px}header input{
 video{width:100%;background:#000;max-height:70vh}
 header{flex-wrap:wrap;row-gap:8px}
 @media(max-width:600px){header{gap:12px;padding:10px 12px}header h1{font-size:22px}header input{order:5;width:100%;margin-left:0}#hero h2{font-size:30px}#hero{height:60vh}.card{flex-basis:110px;height:165px}.ct{padding:0 16px 20px}.bd{height:200px}.srv{flex-wrap:wrap}#modal{padding-left:0;padding-right:0}}
-</style></head><body>
+</style><script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script></head><body>
 <header><h1>SEF-FLIX</h1><a onclick="home()" style="cursor:pointer">Home</a><input id=q placeholder="Search movies & shows" onkeydown="if(event.key=='Enter')search(this.value)"><a onclick="settings()" title=Settings style="cursor:pointer;font-size:22px">⚙</a><a href=/logout style="color:#fff;text-decoration:none;border:1px solid #fff6;padding:6px 12px;border-radius:4px;font-size:14px">Sign out</a></header>
 <div id=hero></div><div id=rows></div>
 <div id=modal onclick="if(event.target==this)closeM()"><div class=box id=mbox></div></div>
@@ -62,11 +62,24 @@ async function loadSrv(type,id,s,e){$('#srv').innerHTML='Searching TorBox…';do
   r.innerHTML=`<div><span class="tag ${x.cached?'ok':''}">${x.cached?'⚡ Cached':'Not cached'}</span><span class=tag>${x.quality}</span><span class=tag>${gb(x.size)}</span>${x.seeders?`<span class=tag>👤 ${x.seeders}</span>`:''}<span class=tag style=background:#3a2a5a>${x.source}</span><br><small>${x.title}</small></div>`;
   const b=document.createElement('button');b.className='btn';b.textContent=x.cached?'▶ Play':'+ Add to TorBox';b.onclick=()=>play(x,s,e,b);r.append(b);$('#srv').append(r)})}
 async function play(x,s,e,b){b.textContent='…';const d=await api(`/api/play?hash=${x.hash}${s?`&s=${s}&e=${e}`:''}${x.file?'&file='+encodeURIComponent(x.file):''}`);
- if(d.status!='ok'){b.textContent=d.status||'error';alert(d.detail||d.error);return}b.textContent='▶ Play';showPlayer(d.url,d.name)}
-function showPlayer(url,name){$('#player').innerHTML=`<video controls autoplay src="${url}"></video><p style=font-size:13px>${name} · <a style=color:#46d369 href="${url}" target=_blank>Open/download link</a> · <a style=color:#46d369 href="vlc://${url}">Open in VLC</a> <small style=color:#aaa>(MKV/HEVC/DTS may not play in-browser — use VLC)</small></p>`;$('#player').scrollIntoView()}
+ if(d.status!='ok'){b.textContent=d.status||'error';alert(d.detail||d.error);return}b.textContent='▶ Play';showPlayer(d.url,d.name,d.tid,d.fid)}
+function vlcLink(u){const ua=navigator.userAgent;if(/iPhone|iPad|iPod/.test(ua)||(/Macintosh/.test(ua)&&'ontouchend' in document))return'vlc-x-callback://x-callback-url/stream?url='+encodeURIComponent(u);
+ if(/Android/.test(ua))return'intent:'+u.replace(/^https?:/,'')+'#Intent;scheme=https;package=org.videolan.vlc;type=video/*;end';return'vlc://'+u}
+function canDirect(name,v){if(/\.(mkv|avi|ts)$/i.test(name)||/hevc|x265|h\.?265|\bDV\b|dovi|dolby.?vision/i.test(name))return false;return !!v.canPlayType(/\.webm$/i.test(name)?'video/webm':'video/mp4')}
+async function showPlayer(url,name,tid,fid){const P=$('#player');
+ P.innerHTML=`<video controls playsinline style="display:none"></video><div id=pmsg style="padding:12px;background:#222;border-radius:4px;font-size:14px">Preparing…</div>
+ <p style="font-size:14px;display:flex;flex-wrap:wrap;gap:8px;margin:10px 0"><a class=btn href="${vlcLink(url)}">Open in VLC</a><a class="btn g" href="infuse://x-callback-url/play?url=${encodeURIComponent(url)}">Open in Infuse</a><button class="btn g" id=cpy>Copy link</button><a class="btn g" href="${url}" target=_blank rel=noopener>Download</a></p><small style=color:#aaa>${name}</small>`;
+ $('#cpy').onclick=async()=>{try{await navigator.clipboard.writeText(url);$('#cpy').textContent='Copied ✓'}catch{prompt('Copy this link:',url)}};
+ const v=P.querySelector('video'),m=$('#pmsg');P.scrollIntoView();
+ const fail=why=>{v.style.display='none';m.style.display='';m.innerHTML=`⚠ Can't play in the browser: ${why}<br>Use <b>Open in VLC</b> / <b>Infuse</b>, or <b>Copy link</b> and paste it into your player (VLC: Network Stream).`};
+ if(canDirect(name,v)){v.src=url;v.style.display='';m.style.display='none';v.onerror=()=>fail('the browser couldn\'t decode this file.');v.play().catch(()=>{});return}
+ if(tid!=null){m.textContent='This file (MKV/HEVC/HDR) needs transcoding — trying TorBox web streaming…';const d=await api(`/api/hls?tid=${tid}&fid=${fid}`);
+  if(d.ok){v.style.display='';m.style.display='none';if(v.canPlayType('application/vnd.apple.mpegurl'))v.src=d.hls;else if(window.Hls&&Hls.isSupported()){const hl=new Hls();hl.loadSource(d.hls);hl.attachMedia(v);hl.on(Hls.Events.ERROR,(e,x)=>{if(x.fatal)fail('stream error.')})}else return fail('HLS not supported.');v.play().catch(()=>{});return}
+  return fail(`format is MKV/HEVC/HDR and TorBox web streaming isn't available (${d.detail}).`)}
+ fail('format is MKV/HEVC/HDR.')}
 async function libOpen(t){$('#modal').style.display='block';$('#mbox').innerHTML=`<div class=ct style="padding:20px"><span class=x onclick=closeM()>✕</span><h2>${t.name}</h2><div id=player></div><div id=srv></div></div>`;
  t.files.forEach(f=>{const r=document.createElement('div');r.className='srv';r.innerHTML=`<div>${f.name}<br><small>${gb(f.size)}</small></div>`;const b=document.createElement('button');b.className='btn';b.textContent='▶ Play';
-  b.onclick=async()=>{const d=await api(`/api/libplay?tid=${t.id}&fid=${f.id}`);d.status=='ok'?showPlayer(d.url,f.name):alert(d.detail)};r.append(b);$('#srv').append(r)})}
+  b.onclick=async()=>{const d=await api(`/api/libplay?tid=${t.id}&fid=${f.id}`);d.status=='ok'?showPlayer(d.url,f.name,d.tid,d.fid):alert(d.detail)};r.append(b);$('#srv').append(r)})}
 function getCfg(){try{const c=JSON.parse(localStorage.sefcfg);if(c&&c.src)return c}catch{}return{src:['tbsearch','torrentio','torrentsdb','peerflix'],addons:[]}}
 function saveCfg(c){localStorage.sefcfg=JSON.stringify(c)}
 async function settings(){const c=getCfg(),b=await api('/api/sources');$('#modal').style.display='block';

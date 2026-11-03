@@ -47,7 +47,7 @@ async function streams(K,type,id,s,e,srcs,custom){const auth=H(K);srcs=srcs||DEF
  list.sort((a,b)=>(b.cached-a.cached)||(b.seeders-a.seeders));
  return{streams:list,status};
 }
-async function play(K,hash,s,e,file){const auth=H(K);
+async function play(K,hash,s,e,file,ip){const auth=H(K);
  const my=await j(`${TB}/torrents/mylist?bypass_cache=true`,auth);
  let t=(my.data||[]).find(x=>x.hash==hash);
  if(!t){const fd=new FormData();fd.append('magnet',`magnet:?xt=urn:btih:${hash}`);fd.append('add_only_if_cached','false');
@@ -60,9 +60,9 @@ async function play(K,hash,s,e,file){const auth=H(K);
  if(file){const f=files.find(f=>f.short_name==file);if(f)files=[f];}
  if(s){const p=new RegExp(`s0?${s}[ ._-]?e0?${e}(?!\\d)|${s}x0?${e}(?!\\d)`,'i');const m=files.filter(f=>p.test(f.name));if(m.length)files=m;}
  files.sort((a,b)=>b.size-a.size);const f=files[0];if(!f)return{status:'nofile',detail:'No video file found yet'};
- const r=await j(`${TB}/torrents/requestdl?token=${encodeURIComponent(K)}&torrent_id=${t.id}&file_id=${f.id}&redirect=false`);
+ const r=await j(`${TB}/torrents/requestdl?token=${encodeURIComponent(K)}&torrent_id=${t.id}&file_id=${f.id}&redirect=false&append_name=true${ip?'&user_ip='+encodeURIComponent(ip):''}`);
  if(!r.success)throw new Error(r.detail);
- return{status:'ok',url:r.data,name:f.short_name,mime:f.mimetype};
+ return{status:'ok',url:r.data,name:f.short_name,mime:f.mimetype,tid:t.id,fid:f.id};
 }
 const send=(res,c,o)=>{res.writeHead(c,{'content-type':'application/json'});res.end(JSON.stringify(o));};
 http.createServer(async(req,res)=>{const u=new URL(req.url,'http://x');const q=Object.fromEntries(u.searchParams);
@@ -72,7 +72,7 @@ http.createServer(async(req,res)=>{const u=new URL(req.url,'http://x');const q=O
    let ok=false;if(/^[A-Za-z0-9-]{20,80}$/.test(k)){try{const r=await j(`${TB}/user/me`,H(k));ok=!!r.success;}catch{}}
    if(!ok){await new Promise(r=>setTimeout(r,1000));res.writeHead(401,{'content-type':'text/html'});return res.end(LOGIN('That TorBox API key was rejected.'));}
    res.writeHead(302,{'Set-Cookie':COOKIE(seal({k,exp:Date.now()+30*864e5}),f.get('r')?2592000:null),Location:'/'});return res.end();}
-  const S=session(req);const K=S&&S.k;
+  const IP=(String(req.headers['x-forwarded-for']||'').split(',')[0].trim())||'';const S=session(req);const K=S&&S.k;
   if(!S){if(u.pathname.startsWith('/api/'))return send(res,401,{error:'unauthorized'});res.writeHead(401,{'content-type':'text/html'});return res.end(LOGIN(0));}
   if(u.pathname=='/api/catalog'){const ex=q.genre?`/genre=${encodeURIComponent(q.genre)}`:'';
    return send(res,200,await j(`${CM}/catalog/${q.type}/${q.id||'top'}${ex}.json`,{},3600000));}
@@ -83,10 +83,12 @@ http.createServer(async(req,res)=>{const u=new URL(req.url,'http://x');const q=O
   if(u.pathname=='/api/sources')return send(res,200,{builtin:[{id:'tbsearch',name:'TorBox Search'},...Object.entries(BUILTIN).map(([id,v])=>({id,name:v.name}))],defaults:DEFAULT_SRC});
   if(u.pathname=='/api/validate-addon'){try{const b=await safeBase(q.url);const m=await fetch(b+'/manifest.json',{redirect:'error',signal:AbortSignal.timeout(8000)}).then(r=>r.json());
    return send(res,200,{ok:true,base:b,name:m.name||new URL(b).hostname,stream:(m.resources||[]).some(r=>r=='stream'||r?.name=='stream')});}catch(e){return send(res,200,{ok:false,error:String(e.message||e)})}}
-  if(u.pathname=='/api/play')return send(res,200,await play(K,q.hash,q.s,q.e,q.file));
+  if(u.pathname=='/api/play')return send(res,200,await play(K,q.hash,q.s,q.e,q.file,IP));
   if(u.pathname=='/api/library'){const r=await j(`${TB}/torrents/mylist?bypass_cache=true`,H(K));
    return send(res,200,{items:(r.data||[]).map(t=>({id:t.id,hash:t.hash,name:t.name,size:t.size,state:t.download_state,ready:t.download_present,files:(t.files||[]).filter(f=>VID.test(f.name)).map(f=>({id:f.id,name:f.short_name,size:f.size}))}))});}
-  if(u.pathname=='/api/libplay'){const r=await j(`${TB}/torrents/requestdl?token=${encodeURIComponent(K)}&torrent_id=${q.tid}&file_id=${q.fid}&redirect=false`);return send(res,200,{status:r.success?'ok':'err',url:r.data,detail:r.detail});}
+  if(u.pathname=='/api/libplay'){const r=await j(`${TB}/torrents/requestdl?token=${encodeURIComponent(K)}&torrent_id=${q.tid}&file_id=${q.fid}&redirect=false&append_name=true${IP?'&user_ip='+encodeURIComponent(IP):''}`);return send(res,200,{status:r.success?'ok':'err',url:r.data,detail:r.detail,tid:q.tid,fid:q.fid});}
+  if(u.pathname=='/api/hls'){const r=await j(`${TB}/stream/createstream?id=${encodeURIComponent(q.tid)}&file_id=${encodeURIComponent(q.fid)}&type=torrent&chosen_audio_index=0&chosen_resolution_index=0`,H(K));
+   return send(res,200,r.success&&r.data?.hls_url?{ok:true,hls:r.data.hls_url}:{ok:false,detail:r.detail||r.error||'Streaming unavailable'});}
   const p=path.join(__dirname,'public',u.pathname=='/'?'index.html':path.normalize(u.pathname));
   if(p.startsWith(path.join(__dirname,'public'))&&fs.existsSync(p)){res.writeHead(200,{'content-type':p.endsWith('.html')?'text/html':'text/plain'});return fs.createReadStream(p).pipe(res);}
   res.writeHead(404);res.end();
