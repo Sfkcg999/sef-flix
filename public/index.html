@@ -1,6 +1,6 @@
 <!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>SEF-FLIX</title>
 <style>
-body{margin:0;background:#141414;color:#fff;font-family:Helvetica,Arial,sans-serif}
+html{--nav-h:64px}body{margin:0;background:#141414;color:#fff;font-family:Helvetica,Arial,sans-serif}
 header{position:fixed;top:0;width:100%;z-index:10;display:flex;align-items:center;gap:20px;padding:14px 4%;box-sizing:border-box;background:rgba(20,20,20,.95);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid #2a2a2a;box-shadow:0 2px 12px #000a}
 header h1{color:#e50914;margin:0;font-size:28px;letter-spacing:2px}header input{margin-left:auto;background:#000a;border:1px solid #fff6;color:#fff;padding:7px 10px;width:220px}
 #hero{height:70vh;background-size:cover;background-position:center top;position:relative}
@@ -10,32 +10,35 @@ header h1{color:#e50914;margin:0;font-size:28px;letter-spacing:2px}header input{
 .row{margin:0 4% 26px}.row h3{margin:6px 0}.sc{display:flex;gap:8px;overflow-x:auto;padding:8px 0}.sc::-webkit-scrollbar{display:none}
 .card{flex:0 0 150px;height:225px;border-radius:4px;background:#222 center/cover;cursor:pointer;transition:.2s;position:relative}.card:hover{transform:scale(1.08);z-index:2}
 .lib{flex:0 0 260px;background:#222;border-radius:4px;padding:10px;font-size:13px;cursor:pointer}.lib small{color:#aaa}
-#modal{display:none;position:fixed;inset:0;background:#000b;z-index:20;overflow:auto}#modal .box{max-width:900px;margin:40px auto;background:#181818;border-radius:8px;overflow:hidden}
+#modal{display:none;position:fixed;inset:0;background:#000b;z-index:1000;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:calc(var(--nav-h) + 12px) 10px 40px;box-sizing:border-box}#modal .box{max-width:900px;margin:0 auto;background:#181818;border-radius:8px;overflow:hidden}
 .bd{height:340px;background:center/cover;position:relative}.bd:after{content:'';position:absolute;inset:0;background:linear-gradient(#0000 50%,#181818)}
 .ct{padding:0 30px 30px}.x{float:right;cursor:pointer;font-size:28px;margin:10px 16px;position:relative;z-index:3}
 .meta span{margin-right:12px;color:#46d369}.srv{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #333;font-size:13px}
 .tag{padding:2px 6px;border-radius:3px;background:#333;margin-right:5px}.ok{background:#1d7a2d}select{background:#333;color:#fff;padding:6px;border:0;margin:4px}
 .eps{display:flex;flex-wrap:wrap;gap:6px}.ep{background:#2a2a2a;padding:6px 10px;border-radius:3px;cursor:pointer;font-size:13px}.ep.on{background:#e50914}
 video{width:100%;background:#000;max-height:70vh}
+header{flex-wrap:wrap;row-gap:8px}
+@media(max-width:600px){header{gap:12px;padding:10px 12px}header h1{font-size:22px}header input{order:5;width:100%;margin-left:0}#hero h2{font-size:30px}#hero{height:60vh}.card{flex-basis:110px;height:165px}.ct{padding:0 16px 20px}.bd{height:200px}.srv{flex-wrap:wrap}#modal{padding-left:0;padding-right:0}}
 </style></head><body>
-<header><h1>SEF-FLIX</h1><a onclick="home()" style="cursor:pointer">Home</a><input id=q placeholder="Search movies & shows" onkeydown="if(event.key=='Enter')search(this.value)"></header><a onclick="settings()" title=Settings style="cursor:pointer;font-size:22px">⚙</a><a href=/logout style="color:#fff;text-decoration:none;border:1px solid #fff6;padding:6px 12px;border-radius:4px;font-size:14px">Sign out</a>
+<header><h1>SEF-FLIX</h1><a onclick="home()" style="cursor:pointer">Home</a><input id=q placeholder="Search movies & shows" onkeydown="if(event.key=='Enter')search(this.value)"><a onclick="settings()" title=Settings style="cursor:pointer;font-size:22px">⚙</a><a href=/logout style="color:#fff;text-decoration:none;border:1px solid #fff6;padding:6px 12px;border-radius:4px;font-size:14px">Sign out</a></header>
 <div id=hero></div><div id=rows></div>
 <div id=modal onclick="if(event.target==this)closeM()"><div class=box id=mbox></div></div>
 <script>
+const setNav=()=>document.documentElement.style.setProperty('--nav-h',document.querySelector('header').offsetHeight+'px');addEventListener('resize',setNav);addEventListener('load',setNav);setTimeout(setNav,0);
 const $=s=>document.querySelector(s),api=u=>fetch(u).then(r=>r.json());
 const gb=b=>b>1e9?(b/1e9).toFixed(2)+' GB':(b/1e6|0)+' MB';
 const ROWS=[['Trending Movies','movie','top'],['Trending Shows','series','top'],['Popular Movies','movie','imdbRating'],['Top Rated Shows','series','imdbRating'],
 ['Action','movie','top','Action'],['Comedy','movie','top','Comedy'],['Horror','movie','top','Horror'],['Sci-Fi','movie','top','Sci-Fi'],['Drama Series','series','top','Drama'],['Animation','movie','top','Animation'],['Crime Series','series','top','Crime']];
 function card(m){const d=document.createElement('div');d.className='card';d.style.backgroundImage=`url(${m.poster})`;d.title=m.name;d.onclick=()=>openT(m.type,m.imdb_id||m.id);return d}
 function row(t,items){const r=document.createElement('div');r.className='row';r.innerHTML=`<h3>${t}</h3><div class=sc></div>`;items.forEach(i=>r.lastChild.append(i));$('#rows').append(r);return r}
-async function home(){$('#rows').innerHTML='';$('#hero').style.display='';
+async function home(){$('#rows').innerHTML='';$('#rows').style.paddingTop='';$('#hero').style.display='';
  const lib=row('My TorBox Library',[]);api('/api/library').then(d=>d.items.forEach(t=>{const e=document.createElement('div');e.className='lib';
   e.innerHTML=`<b>${t.name}</b><br><small>${gb(t.size)} · ${t.state} · ${t.files.length} video file(s)</small>`;e.onclick=()=>libOpen(t);lib.lastChild.append(e)}));
  for(const [t,ty,id,g] of ROWS){const d=await api(`/api/catalog?type=${ty}&id=${id}${g?'&genre='+g:''}`);const ms=(d.metas||[]).filter(m=>m.poster);
   if(t=='Trending Movies')setHero(ms[0]);row(t,ms.map(card));}}
 function setHero(m){$('#hero').style.backgroundImage=`url(${m.background||m.poster})`;
  $('#hero').innerHTML=`<div class=in><h2>${m.name}</h2><p>${(m.description||'').slice(0,250)}</p><button class=btn onclick="openT('${m.type}','${m.imdb_id||m.id}')">▶ Play</button><button class="btn g" onclick="openT('${m.type}','${m.imdb_id||m.id}')">ⓘ More Info</button></div>`}
-async function search(q){const d=await api('/api/search?q='+encodeURIComponent(q));$('#rows').innerHTML='';$('#hero').style.display='none';$('#rows').style.paddingTop='70px';
+async function search(q){const d=await api('/api/search?q='+encodeURIComponent(q));$('#rows').innerHTML='';$('#hero').style.display='none';$('#rows').style.paddingTop='calc(var(--nav-h) + 12px)';
  row('Movies: '+q,d.movie.filter(m=>m.poster).map(card));row('Shows: '+q,d.series.filter(m=>m.poster).map(card))}
 function closeM(){$('#modal').style.display='none';$('#mbox').innerHTML=''}
 let cur;
