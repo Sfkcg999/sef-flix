@@ -65,9 +65,18 @@ async function play(K,hash,s,e,file,ip){const auth=H(K);
  return{status:'ok',url:r.data,name:f.short_name,mime:f.mimetype,tid:t.id,fid:f.id};
 }
 const vlink=(req,k,t,f,name)=>`https://${req.headers['x-forwarded-host']||req.headers.host}/v/${seal({k,t:+t,f:+f,exp:Date.now()+12*36e5})}/${encodeURIComponent(String(name||'video.mkv').replace(/[\/]/g,'_'))}`;
+const plink=v=>v.replace('/v/','/p/');
 const send=(res,c,o)=>{res.writeHead(c,{'content-type':'application/json'});res.end(JSON.stringify(o));};
 http.createServer(async(req,res)=>{const u=new URL(req.url,'http://x');const q=Object.fromEntries(u.searchParams);
  try{
+  if(u.pathname.startsWith('/p/')){const o=unseal(u.pathname.split('/')[2]||'');
+   if(!o||o.exp<Date.now()){res.writeHead(410);return res.end('Link expired');}
+   const r=await j(`${TB}/torrents/requestdl?token=${encodeURIComponent(o.k)}&torrent_id=${o.t}&file_id=${o.f}&redirect=false`);
+   if(!r.success){res.writeHead(502);return res.end('TorBox error');}
+   const up=await fetch(r.data,{method:req.method=='HEAD'?'HEAD':'GET',headers:req.headers.range?{Range:req.headers.range}:{}});
+   const hd={};for(const k of ['content-type','content-length','content-range','accept-ranges','last-modified','etag'])if(up.headers.get(k))hd[k]=up.headers.get(k);hd['accept-ranges']='bytes';
+   res.writeHead(up.status,hd);if(req.method=='HEAD'||!up.body)return res.end();
+   const {Readable}=require('stream');const st=Readable.fromWeb(up.body);req.on('close',()=>st.destroy());return st.pipe(res);}
   if(u.pathname.startsWith('/v/')){const IP=(String(req.headers['x-forwarded-for']||'').split(',')[0].trim());const [,,tok]=u.pathname.split('/');const o=unseal(tok||'');
    if(!o||o.exp<Date.now()){res.writeHead(410);return res.end('Link expired - press Play again in SEF-FLIX');}
    const r=await j(`${TB}/torrents/requestdl?token=${encodeURIComponent(o.k)}&torrent_id=${o.t}&file_id=${o.f}&redirect=false${IP?'&user_ip='+encodeURIComponent(IP):''}`);
