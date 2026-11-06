@@ -5,6 +5,7 @@ const api=u=>fetch(u,{credentials:'same-origin'}).then(r=>{if(r.status==401){loc
 const gb=b=>!b?'':b>=1e9?(b/1e9).toFixed(1)+' GB':Math.round(b/1e6)+' MB';
 const h=html=>{const t=document.createElement('template');t.innerHTML=html.trim();return t.content.firstElementChild};
 const IOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&'ontouchend' in document);
+const STANDALONE=navigator.standalone===true||matchMedia('(display-mode: standalone)').matches;
 const APPLE=IOS||/Safari/.test(navigator.userAgent)&&!/Chrome|Chromium|Android/.test(navigator.userAgent);
 const I={
  play:'<svg class=fill viewBox="0 0 24 24"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5Z"/></svg>',
@@ -163,10 +164,17 @@ const canDirect=n=>!/\.(mkv|avi|ts)$/i.test(n)&&!/hevc|x265|h\.?265|\bDV\b|dovi|
 function showPlayer(d){const P=$('#player');hlsInst?.destroy();hlsInst=null;
  const easy=canDirect(d.name);
  P.innerHTML=`<div class=now><div class=lb>Ready to play</div><div class=fn>${esc(d.name)}</div>
-  <div class=acts><a class="btn r" href="vlc://${esc(d.stream)}">${I.cone} Play in VLC</a><button class="btn w" id=web>${I.compass} Play in ${APPLE?'Safari':'browser'}</button><a class=btn href="${esc(d.download)}" download="${esc(d.name)}">${I.down} Download</a></div>
-  <p class=hint>${easy?'This file should play right in the browser.':'MKV/HEVC file — VLC is the most reliable option.'}${IOS?' Download saves to Files › Downloads.':''}</p><div id=pv></div></div>`;
- $('#web').onclick=()=>webPlay(d);
+  <div class=acts><a class="btn r" href="vlc://${esc(d.stream)}">${I.cone} Play in VLC</a><button class="btn w" id=web>${I.compass} Play in ${APPLE?'Safari':'browser'}</button><a class=btn id=dl href="${esc(d.download)}" download="${esc(d.name)}">${I.down} Download</a></div>
+  <p class=hint>${easy?'This file should play right in the browser.':'MKV/HEVC file — VLC is the most reliable option.'}${IOS?(STANDALONE?' Download opens Safari to save to Files.':' Download saves to Files › Downloads.'):''}</p><div id=pv></div></div>`;
+ $('#web').onclick=()=>webPlay(d);$('#dl').onclick=e=>{e.preventDefault();download(d)};
  P.scrollIntoView({behavior:'smooth',block:'start'})}
+async function download(d){const b=$('#dl');if(b.dataset.busy)return;b.dataset.busy=1;const old=b.innerHTML;b.innerHTML='<span class=spin style="width:16px;height:16px"></span> Checking…';
+ let st=0;try{st=(await fetch(d.download,{method:'HEAD',credentials:'same-origin'})).status}catch{}
+ b.innerHTML=old;delete b.dataset.busy;
+ if(st==410)return toast('Download link expired — tap Play on the source again');
+ if(!st||st>=500)return toast('TorBox couldn’t prepare the download — try again');
+ if(IOS&&STANDALONE){location.href='x-safari-'+d.download;toast('Opening Safari to download… tap Download there, then find it in Files › Downloads');return}
+ location.href=d.download;toast(IOS?'Download started — Safari’s ↓ button shows progress; it saves to Files › Downloads':'Download started')}
 function loadHls(){return window.Hls?Promise.resolve():new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js';s.onload=ok;s.onerror=no;document.head.append(s)})}
 async function webPlay(d){const pv=$('#pv'),btn=$('#web');
  const fail=why=>{pv.innerHTML=`<div class=msg>${esc(why)} Use <b>Play in VLC</b>, or pick a source tagged <b>Safari ✓</b>.</div>`};
