@@ -1,96 +1,23 @@
-<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>SEF-FLIX</title>
-<style>
-html{--nav-h:64px}body{margin:0;background:#141414;color:#fff;font-family:Helvetica,Arial,sans-serif}
-header{position:fixed;top:0;width:100%;z-index:10;display:flex;align-items:center;gap:20px;padding:14px 4%;box-sizing:border-box;background:rgba(20,20,20,.95);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid #2a2a2a;box-shadow:0 2px 12px #000a}
-header h1{color:#e50914;margin:0;font-size:28px;letter-spacing:2px}header input{margin-left:auto;background:#000a;border:1px solid #fff6;color:#fff;padding:7px 10px;width:220px}
-#hero{height:70vh;background-size:cover;background-position:center top;position:relative}
-#hero .in{position:absolute;bottom:18%;left:4%;max-width:560px}#hero h2{font-size:46px;margin:0 0 10px}#hero p{text-shadow:0 1px 3px #000;line-height:1.4}
-#hero:after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,#000c,#0000 60%),linear-gradient(#0000 70%,#141414);pointer-events:none}#hero .in{z-index:2}
-.btn{background:#fff;color:#000;border:0;padding:9px 22px;font-weight:bold;border-radius:4px;cursor:pointer;margin-right:8px}.btn.g{background:#6d6d6eb3;color:#fff}
-.row{margin:0 4% 26px}.row h3{margin:6px 0}.sc{display:flex;gap:8px;overflow-x:auto;padding:8px 0}.sc::-webkit-scrollbar{display:none}
-.card{flex:0 0 150px;height:225px;border-radius:4px;background:#222 center/cover;cursor:pointer;transition:.2s;position:relative}.card:hover{transform:scale(1.08);z-index:2}
-.lib{flex:0 0 260px;background:#222;border-radius:4px;padding:10px;font-size:13px;cursor:pointer}.lib small{color:#aaa}
-#modal{display:none;position:fixed;inset:0;background:#000b;z-index:1000;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:calc(var(--nav-h) + 12px) 10px 40px;box-sizing:border-box}#modal .box{max-width:900px;margin:0 auto;background:#181818;border-radius:8px;overflow:hidden}
-.bd{height:340px;background:center/cover;position:relative}.bd:after{content:'';position:absolute;inset:0;background:linear-gradient(#0000 50%,#181818)}
-.ct{padding:0 30px 30px}.x{float:right;cursor:pointer;font-size:28px;margin:10px 16px;position:relative;z-index:3}
-.meta span{margin-right:12px;color:#46d369}.srv{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #333;font-size:13px}
-.tag{padding:2px 6px;border-radius:3px;background:#333;margin-right:5px}.ok{background:#1d7a2d}select{background:#333;color:#fff;padding:6px;border:0;margin:4px}
-.eps{display:flex;flex-wrap:wrap;gap:6px}.ep{background:#2a2a2a;padding:6px 10px;border-radius:3px;cursor:pointer;font-size:13px}.ep.on{background:#e50914}
-video{width:100%;background:#000;max-height:70vh}
-header{flex-wrap:wrap;row-gap:8px}
-@media(max-width:600px){header{gap:12px;padding:10px 12px}header h1{font-size:22px}header input{order:5;width:100%;margin-left:0}#hero h2{font-size:30px}#hero{height:60vh}.card{flex-basis:110px;height:165px}.ct{padding:0 16px 20px}.bd{height:200px}.srv{flex-wrap:wrap}#modal{padding-left:0;padding-right:0}}
-</style><script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script></head><body>
-<header><h1>SEF-FLIX</h1><a onclick="home()" style="cursor:pointer">Home</a><input id=q placeholder="Search movies & shows" onkeydown="if(event.key=='Enter')search(this.value)"><a onclick="settings()" title=Settings style="cursor:pointer;font-size:22px">⚙</a><a href=/logout style="color:#fff;text-decoration:none;border:1px solid #fff6;padding:6px 12px;border-radius:4px;font-size:14px">Sign out</a></header>
-<div id=hero></div><div id=rows></div>
-<div id=modal onclick="if(event.target==this)closeM()"><div class=box id=mbox></div></div>
-<script>
-const setNav=()=>document.documentElement.style.setProperty('--nav-h',document.querySelector('header').offsetHeight+'px');addEventListener('resize',setNav);addEventListener('load',setNav);setTimeout(setNav,0);
-const $=s=>document.querySelector(s),api=u=>fetch(u).then(r=>r.json());
-const gb=b=>b>1e9?(b/1e9).toFixed(2)+' GB':(b/1e6|0)+' MB';
-const ROWS=[['Trending Movies','movie','top'],['Trending Shows','series','top'],['Popular Movies','movie','imdbRating'],['Top Rated Shows','series','imdbRating'],
-['Action','movie','top','Action'],['Comedy','movie','top','Comedy'],['Horror','movie','top','Horror'],['Sci-Fi','movie','top','Sci-Fi'],['Drama Series','series','top','Drama'],['Animation','movie','top','Animation'],['Crime Series','series','top','Crime']];
-function card(m){const d=document.createElement('div');d.className='card';d.style.backgroundImage=`url(${m.poster})`;d.title=m.name;d.onclick=()=>openT(m.type,m.imdb_id||m.id);return d}
-function row(t,items){const r=document.createElement('div');r.className='row';r.innerHTML=`<h3>${t}</h3><div class=sc></div>`;items.forEach(i=>r.lastChild.append(i));$('#rows').append(r);return r}
-async function home(){$('#rows').innerHTML='';$('#rows').style.paddingTop='';$('#hero').style.display='';
- const lib=row('My TorBox Library',[]);api('/api/library').then(d=>d.items.forEach(t=>{const e=document.createElement('div');e.className='lib';
-  e.innerHTML=`<b>${t.name}</b><br><small>${gb(t.size)} · ${t.state} · ${t.files.length} video file(s)</small>`;e.onclick=()=>libOpen(t);lib.lastChild.append(e)}));
- for(const [t,ty,id,g] of ROWS){const d=await api(`/api/catalog?type=${ty}&id=${id}${g?'&genre='+g:''}`);const ms=(d.metas||[]).filter(m=>m.poster);
-  if(t=='Trending Movies')setHero(ms[0]);row(t,ms.map(card));}}
-function setHero(m){$('#hero').style.backgroundImage=`url(${m.background||m.poster})`;
- $('#hero').innerHTML=`<div class=in><h2>${m.name}</h2><p>${(m.description||'').slice(0,250)}</p><button class=btn onclick="openT('${m.type}','${m.imdb_id||m.id}')">▶ Play</button><button class="btn g" onclick="openT('${m.type}','${m.imdb_id||m.id}')">ⓘ More Info</button></div>`}
-async function search(q){const d=await api('/api/search?q='+encodeURIComponent(q));$('#rows').innerHTML='';$('#hero').style.display='none';$('#rows').style.paddingTop='calc(var(--nav-h) + 12px)';
- row('Movies: '+q,d.movie.filter(m=>m.poster).map(card));row('Shows: '+q,d.series.filter(m=>m.poster).map(card))}
-function closeM(){$('#modal').style.display='none';$('#mbox').innerHTML=''}
-let cur;
-async function openT(type,id){$('#modal').style.display='block';$('#mbox').innerHTML='<div class=ct style="padding:30px">Loading…</div>';
- const m=(await api(`/api/meta?type=${type}&id=${id}`)).meta;cur=m;
- $('#mbox').innerHTML=`<div class=bd style="background-image:url(${m.background||m.poster})"><span class=x onclick=closeM()>✕</span></div><div class=ct>
- <h2>${m.name}</h2><div class=meta><span>★ ${m.imdbRating||'–'}</span>${m.releaseInfo||m.year||''} · ${m.runtime||''} · ${(m.genres||m.genre||[]).join(', ')}</div>
- <p>${m.description||''}</p><p style="color:#aaa;font-size:13px">Cast: ${(m.cast||[]).slice(0,6).join(', ')}</p><div id=player></div><div id=eps></div><h3 id=sh>Servers</h3><div id=srv></div></div>`;
- if(type=='series'){const ss=[...new Set((m.videos||[]).map(v=>v.season))].filter(s=>s>0).sort((a,b)=>a-b);
-  $('#eps').innerHTML=`<select id=season onchange=showEps()>${ss.map(s=>`<option>${s}</option>`)}</select><div class=eps id=eplist></div>`;showEps();}
- else loadSrv(type,id)}
-function showEps(){const s=+$('#season').value;const eps=cur.videos.filter(v=>v.season==s).sort((a,b)=>a.episode-b.episode);
- $('#eplist').innerHTML='';eps.forEach(v=>{const e=document.createElement('div');e.className='ep';e.textContent=`E${v.episode} ${v.name||v.title||''}`;
-  e.onclick=()=>{document.querySelectorAll('.ep').forEach(x=>x.classList.remove('on'));e.classList.add('on');loadSrv('series',cur.id,s,v.episode)};$('#eplist').append(e)});
- $('#srv').innerHTML='<p style=color:#aaa>Pick an episode to see servers.</p>'}
-async function loadSrv(type,id,s,e){$('#srv').innerHTML='Searching TorBox…';document.getElementById('srcst')?.remove();$('#sh').textContent='Servers'+(s?` – S${s}E${e}`:'');
- const cfg=getCfg();const d=await api(`/api/streams?type=${type}&id=${id}${s?`&s=${s}&e=${e}`:''}&src=${cfg.src.join(',')}&addons=${encodeURIComponent(JSON.stringify(cfg.addons))}`);if(d.error)return $('#srv').innerHTML=d.error;
- const st=Object.entries(d.status||{}).map(([k,v])=>`${k}: ${typeof v=='number'?v:'⚠'}`).join(' · ');$('#sh').insertAdjacentHTML('afterend',`<div id=srcst style="color:#888;font-size:12px">${st}</div>`);
- if(!d.streams.length)return $('#srv').innerHTML='No servers found.';
- $('#srv').innerHTML='';d.streams.slice(0,60).forEach(x=>{const r=document.createElement('div');r.className='srv';
-  r.innerHTML=`<div><span class="tag ${x.cached?'ok':''}">${x.cached?'⚡ Cached':'Not cached'}</span><span class=tag>${x.quality}</span><span class=tag>${gb(x.size)}</span>${x.seeders?`<span class=tag>👤 ${x.seeders}</span>`:''}<span class=tag style=background:#3a2a5a>${x.source}</span><br><small>${x.title}</small></div>`;
-  const b=document.createElement('button');b.className='btn';b.textContent=x.cached?'▶ Play':'+ Add to TorBox';b.onclick=()=>play(x,s,e,b);r.append(b);$('#srv').append(r)})}
-async function play(x,s,e,b){b.textContent='…';const d=await api(`/api/play?hash=${x.hash}${s?`&s=${s}&e=${e}`:''}${x.file?'&file='+encodeURIComponent(x.file):''}`);
- if(d.status!='ok'){b.textContent=d.status||'error';alert(d.detail||d.error);return}b.textContent='▶ Play';showPlayer(d.url,d.name,d.tid,d.fid,d.vlc)}
-function vlcLink(u){const ua=navigator.userAgent;if(/iPhone|iPad|iPod/.test(ua)||(/Macintosh/.test(ua)&&'ontouchend' in document))return'vlc-x-callback://x-callback-url/stream?url='+encodeURIComponent(u);
- if(/Android/.test(ua))return'intent:'+u.replace(/^https?:/,'')+'#Intent;scheme=https;package=org.videolan.vlc;type=video/*;end';return'vlc://'+u}
-function canDirect(name,v){if(/\.(mkv|avi|ts)$/i.test(name)||/hevc|x265|h\.?265|\bDV\b|dovi|dolby.?vision/i.test(name))return false;return !!v.canPlayType(/\.webm$/i.test(name)?'video/webm':'video/mp4')}
-async function showPlayer(url,name,tid,fid,ext){const P=$('#player');const X=ext||url;
- P.innerHTML=`<video controls playsinline style="display:none"></video><div id=pmsg style="padding:12px;background:#222;border-radius:4px;font-size:14px">Preparing…</div>
- <p style="font-size:14px;display:flex;flex-wrap:wrap;gap:8px;margin:10px 0"><a class=btn href="vlc://${X}">Open in VLC</a><a class="btn g" href="vlc://${X.replace('/v/','/p/')}">VLC (via server)</a><a class="btn g" href="${vlcLink(X)}">VLC (alt)</a><a class="btn g" href="infuse://x-callback-url/play?url=${encodeURIComponent(X)}">Open in Infuse</a><button class="btn g" id=cpy>Copy link</button><button class="btn g" id=cpy2>Copy link (via server)</button><a class="btn g" href="${url}" target=_blank rel=noopener>Download</a></p><p style="font-size:12px;color:#aaa;margin:0 0 8px">If VLC fails, try <b>VLC (via server)</b> — it streams through SEF-FLIX instead of directly from TorBox.</p><small style=color:#aaa>${name}</small>`;
- $('#cpy2').onclick=async()=>{const z=X.replace('/v/','/p/');try{await navigator.clipboard.writeText(z);$('#cpy2').textContent='Copied ✓'}catch{prompt('Copy this link:',z)}};$('#cpy').onclick=async()=>{try{await navigator.clipboard.writeText(X);$('#cpy').textContent='Copied ✓'}catch{prompt('Copy this link:',X)}};
- const v=P.querySelector('video'),m=$('#pmsg');P.scrollIntoView();
- const fail=why=>{v.style.display='none';m.style.display='';m.innerHTML=`⚠ Can't play in the browser: ${why}<br>Use <b>Open in VLC</b> / <b>Infuse</b>, or <b>Copy link</b> and paste it into your player (VLC: Network Stream).`};
- if(canDirect(name,v)){v.src=url;v.style.display='';m.style.display='none';v.onerror=()=>fail('the browser couldn\'t decode this file.');v.play().catch(()=>{});return}
- if(tid!=null){m.textContent='This file (MKV/HEVC/HDR) needs transcoding — trying TorBox web streaming…';const d=await api(`/api/hls?tid=${tid}&fid=${fid}`);
-  if(d.ok){v.style.display='';m.style.display='none';if(v.canPlayType('application/vnd.apple.mpegurl'))v.src=d.hls;else if(window.Hls&&Hls.isSupported()){const hl=new Hls();hl.loadSource(d.hls);hl.attachMedia(v);hl.on(Hls.Events.ERROR,(e,x)=>{if(x.fatal)fail('stream error.')})}else return fail('HLS not supported.');v.play().catch(()=>{});return}
-  return fail(`format is MKV/HEVC/HDR and TorBox web streaming isn't available (${d.detail}).`)}
- fail('format is MKV/HEVC/HDR.')}
-async function libOpen(t){$('#modal').style.display='block';$('#mbox').innerHTML=`<div class=ct style="padding:20px"><span class=x onclick=closeM()>✕</span><h2>${t.name}</h2><div id=player></div><div id=srv></div></div>`;
- t.files.forEach(f=>{const r=document.createElement('div');r.className='srv';r.innerHTML=`<div>${f.name}<br><small>${gb(f.size)}</small></div>`;const b=document.createElement('button');b.className='btn';b.textContent='▶ Play';
-  b.onclick=async()=>{const d=await api(`/api/libplay?tid=${t.id}&fid=${f.id}&name=${encodeURIComponent(f.name)}`);d.status=='ok'?showPlayer(d.url,f.name,d.tid,d.fid,d.vlc):alert(d.detail)};r.append(b);$('#srv').append(r)})}
-function getCfg(){try{const c=JSON.parse(localStorage.sefcfg);if(c&&c.src)return c}catch{}return{src:['tbsearch','torrentio','torrentsdb','peerflix'],addons:[]}}
-function saveCfg(c){localStorage.sefcfg=JSON.stringify(c)}
-async function settings(){const c=getCfg(),b=await api('/api/sources');$('#modal').style.display='block';
- $('#mbox').innerHTML=`<div class=ct style="padding:24px"><span class=x onclick=closeM()>✕</span><h2>Settings</h2><h3>Stream sources</h3>
- ${b.builtin.map(s=>`<label style="display:block;margin:6px 0"><input type=checkbox data-s=${s.id} ${c.src.includes(s.id)?'checked':''}> ${s.name}</label>`).join('')}
- <h3>Custom Stremio addons</h3><div id=adl></div><input id=adurl placeholder="https://…/manifest.json" style="width:70%;padding:8px;background:#333;border:0;color:#fff"> <button class=btn onclick=addAddon()>Add</button><p id=aderr style=color:#e87c03></p>
- <p style="color:#888;font-size:12px">Settings are saved in this browser only.</p></div>`;
- document.querySelectorAll('[data-s]').forEach(i=>i.onchange=()=>{const c=getCfg();c.src=[...document.querySelectorAll('[data-s]:checked')].map(x=>x.dataset.s);saveCfg(c)});drawAddons()}
-function drawAddons(){const c=getCfg();$('#adl').innerHTML=c.addons.length?'':'<p style=color:#888>None added.</p>';c.addons.forEach((a,i)=>{const r=document.createElement('div');r.className='srv';r.innerHTML=`<div><b>${a.label}</b><br><small>${a.url}</small></div>`;
- const b=document.createElement('button');b.className='btn g';b.textContent='Remove';b.onclick=()=>{c.addons.splice(i,1);saveCfg(c);drawAddons()};r.append(b);$('#adl').append(r)})}
-async function addAddon(){const u=$('#adurl').value.trim();$('#aderr').textContent='Checking…';const d=await api('/api/validate-addon?url='+encodeURIComponent(u));
- if(!d.ok)return $('#aderr').textContent=d.error;const c=getCfg();if(!c.addons.some(a=>a.url==d.base))c.addons.push({url:d.base,label:d.name});saveCfg(c);$('#adurl').value='';$('#aderr').textContent=d.stream?'':'Added (warning: manifest doesn\'t list a stream resource)';drawAddons()}
-home();
-</script></body></html>
+<!doctype html><html lang=en><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name=theme-color content="#0b0b0b"><meta name=apple-mobile-web-app-capable content=yes><meta name=apple-mobile-web-app-status-bar-style content=black-translucent><meta name=apple-mobile-web-app-title content=SEF-FLIX>
+<title>SEF-FLIX</title>
+<link rel=preconnect href=https://fonts.googleapis.com><link rel=preconnect href=https://fonts.gstatic.com crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap" rel=stylesheet>
+<link rel=stylesheet href=/app.css>
+</head><body>
+<header id=nav>
+ <a class=logo onclick="go.home()">SEF-FLIX</a>
+ <nav><a onclick="go.home()">Home</a><a onclick="go.list()">Library</a></nav>
+ <div class=nav-r>
+  <button class=ib id=sbtn aria-label=Search onclick="go.toggleSearch()"><svg viewBox="0 0 24 24"><circle cx=11 cy=11 r=7 /><path d="m20 20-3.5-3.5"/></svg></button>
+  <button class=ib aria-label=Settings onclick="go.settings()"><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button>
+  <a class=ib href=/logout aria-label="Sign out" title="Sign out"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></a>
+ </div>
+</header>
+<div id=searchbar><div class=sb-in><svg viewBox="0 0 24 24"><circle cx=11 cy=11 r=7 /><path d="m20 20-3.5-3.5"/></svg><input id=q type=search placeholder="Search movies & shows" autocomplete=off enterkeyhint=search></div></div>
+<main><section id=hero></section><div id=rows></div></main>
+<div id=sheet aria-hidden=true><div class=sh-bg onclick="go.close()"></div><div class=sh-box id=sbox role=dialog></div></div>
+<div id=toast></div>
+<script src=/app.js></script>
+</body></html>

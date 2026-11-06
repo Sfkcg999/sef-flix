@@ -8,7 +8,8 @@ const SECRET=process.env.SESSION_SECRET?crypto.createHash('sha256').update(proce
 const seal=o=>{const iv=crypto.randomBytes(12),c=crypto.createCipheriv('aes-256-gcm',SECRET,iv);const d=Buffer.concat([c.update(JSON.stringify(o)),c.final()]);return Buffer.concat([iv,c.getAuthTag(),d]).toString('base64url');};
 const unseal=t=>{try{const b=Buffer.from(t,'base64url'),c=crypto.createDecipheriv('aes-256-gcm',SECRET,b.subarray(0,12));c.setAuthTag(b.subarray(12,28));return JSON.parse(Buffer.concat([c.update(b.subarray(28)),c.final()]));}catch{return null}};
 const session=req=>{const m=(req.headers.cookie||'').match(/sfsess=([^;]+)/);const v=m&&unseal(m[1]);return v&&v.exp>Date.now()&&v.k?v:null;};
-const LOGIN=e=>`<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><title>SEF-FLIX – Sign in</title><body style="background:#141414;color:#fff;font-family:Arial;display:flex;justify-content:center;align-items:center;height:100vh;margin:0"><form method=post action=/login style="background:#000a;padding:40px;border-radius:8px;width:300px"><h1 style="color:#e50914">SEF-FLIX</h1><p style="color:#aaa;font-size:13px">Sign in with your own TorBox API key (TorBox → Settings → API).</p>${e?`<p style=color:#e87c03>${e}</p>`:''}<input type=password name=k placeholder="TorBox API key" autocomplete=off required autofocus style="width:100%;padding:12px;margin:10px 0;box-sizing:border-box;background:#333;border:0;color:#fff"><label style="font-size:13px;color:#ccc"><input type=checkbox name=r checked> Remember me (30 days)</label><button style="width:100%;margin-top:14px;padding:12px;background:#e50914;color:#fff;border:0;font-weight:bold">Sign In</button></form>`;
+const LOGIN=e=>fs.readFileSync(path.join(__dirname,'public','login.html'),'utf8').replace('<!--ERR-->',e?`<p class=err>${e}</p>`:'');
+const AGE=400*864e2;// 400 days (browser max); renewed on every page load
 const COOKIE=(v,age)=>`sfsess=${v}; ${age!=null?`Max-Age=${age}; `:''}Path=/; HttpOnly; Secure; SameSite=Lax`;
 async function j(url,opt={},ttl=0){if(ttl&&cache.has(url)&&cache.get(url).t>Date.now())return cache.get(url).v;
  const r=await fetch(url,{redirect:'follow',...opt,signal:AbortSignal.timeout(20000)});const v=await r.json();if(ttl)cache.set(url,{v,t:Date.now()+ttl});return v;}
@@ -43,7 +44,7 @@ async function streams(K,type,id,s,e,srcs,custom){const auth=H(K);srcs=srcs||DEF
  const list=[...map.values()];const hashes=list.map(x=>x.hash);
  for(let i=0;i<hashes.length;i+=100){try{const c=await j(`${TB}/torrents/checkcached?format=list&hash=${hashes.slice(i,i+100).join(',')}`,auth);
   const set=new Set((c.data||[]).map(d=>String(d.hash).toLowerCase()));list.forEach(x=>{if(set.has(x.hash))x.cached=true})}catch{}}
- list.forEach(x=>{x.quality=qual(x.title+' '+(x.file||'')+' '+(x.qhint||''));delete x.qhint;x.source=x.sources.join(', ')});
+ list.forEach(x=>{const nm=x.title+' '+(x.file||'');x.safari=/\.mp4\b|\bmp4\b/i.test(nm)&&!/hevc|x265|h\.?265|\bDV\b|dovi|10.?bit/i.test(nm);x.quality=qual(x.title+' '+(x.file||'')+' '+(x.qhint||''));delete x.qhint;x.source=x.sources.join(', ')});
  list.sort((a,b)=>(b.cached-a.cached)||(b.seeders-a.seeders));
  return{streams:list,status};
 }
@@ -65,18 +66,22 @@ async function play(K,hash,s,e,file,ip){const auth=H(K);
  return{status:'ok',url:r.data,name:f.short_name,mime:f.mimetype,tid:t.id,fid:f.id};
 }
 const vlink=(req,k,t,f,name)=>`https://${req.headers['x-forwarded-host']||req.headers.host}/v/${seal({k,t:+t,f:+f,exp:Date.now()+12*36e5})}/${encodeURIComponent(String(name||'video.mkv').replace(/[\/]/g,'_'))}`;
-const plink=v=>v.replace('/v/','/p/');
+const links=(req,k,t,f,name)=>{const v=vlink(req,k,t,f,name);return{stream:v.replace('/v/','/p/'),download:v.replace('/v/','/d/')}};
+const MIME={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.json':'application/json','.webmanifest':'application/manifest+json','.ico':'image/x-icon'};
+async function proxy(req,res,o,dl,name){
+ const r=await j(`${TB}/torrents/requestdl?token=${encodeURIComponent(o.k)}&torrent_id=${o.t}&file_id=${o.f}&redirect=false`);
+ if(!r.success){res.writeHead(502);return res.end('TorBox error');}
+ const up=await fetch(r.data,{method:req.method=='HEAD'?'HEAD':'GET',headers:req.headers.range?{Range:req.headers.range}:{}});
+ const hd={};for(const k of ['content-type','content-length','content-range','last-modified','etag'])if(up.headers.get(k))hd[k]=up.headers.get(k);hd['accept-ranges']='bytes';
+ if(dl){const n=String(name||'video.mkv').replace(/[\r\n"]/g,'');hd['content-disposition']=`attachment; filename="${n.replace(/[^\x20-\x7e]/g,'_')}"; filename*=UTF-8''${encodeURIComponent(n)}`;hd['content-type']='application/octet-stream';}
+ res.writeHead(up.status,hd);if(req.method=='HEAD'||!up.body)return res.end();
+ const {Readable}=require('stream');const st=Readable.fromWeb(up.body);req.on('close',()=>st.destroy());st.on('error',()=>res.destroy());return st.pipe(res);}
 const send=(res,c,o)=>{res.writeHead(c,{'content-type':'application/json'});res.end(JSON.stringify(o));};
 http.createServer(async(req,res)=>{const u=new URL(req.url,'http://x');const q=Object.fromEntries(u.searchParams);
  try{
-  if(u.pathname.startsWith('/p/')){const o=unseal(u.pathname.split('/')[2]||'');
-   if(!o||o.exp<Date.now()){res.writeHead(410);return res.end('Link expired');}
-   const r=await j(`${TB}/torrents/requestdl?token=${encodeURIComponent(o.k)}&torrent_id=${o.t}&file_id=${o.f}&redirect=false`);
-   if(!r.success){res.writeHead(502);return res.end('TorBox error');}
-   const up=await fetch(r.data,{method:req.method=='HEAD'?'HEAD':'GET',headers:req.headers.range?{Range:req.headers.range}:{}});
-   const hd={};for(const k of ['content-type','content-length','content-range','accept-ranges','last-modified','etag'])if(up.headers.get(k))hd[k]=up.headers.get(k);hd['accept-ranges']='bytes';
-   res.writeHead(up.status,hd);if(req.method=='HEAD'||!up.body)return res.end();
-   const {Readable}=require('stream');const st=Readable.fromWeb(up.body);req.on('close',()=>st.destroy());return st.pipe(res);}
+  if(/^\/[pd]\//.test(u.pathname)){const [,kind,tok,nm]=u.pathname.split('/');const o=unseal(tok||'');
+   if(!o||o.exp<Date.now()){res.writeHead(410);return res.end('Link expired - press Play again in SEF-FLIX');}
+   return proxy(req,res,o,kind=='d',decodeURIComponent(nm||''));}
   if(u.pathname.startsWith('/v/')){const IP=(String(req.headers['x-forwarded-for']||'').split(',')[0].trim());const [,,tok]=u.pathname.split('/');const o=unseal(tok||'');
    if(!o||o.exp<Date.now()){res.writeHead(410);return res.end('Link expired - press Play again in SEF-FLIX');}
    const r=await j(`${TB}/torrents/requestdl?token=${encodeURIComponent(o.k)}&torrent_id=${o.t}&file_id=${o.f}&redirect=false${IP?'&user_ip='+encodeURIComponent(IP):''}`);
@@ -86,7 +91,7 @@ http.createServer(async(req,res)=>{const u=new URL(req.url,'http://x');const q=O
   if(u.pathname=='/login'&&req.method=='POST'){let b='';for await(const c of req){b+=c;if(b.length>4096)break}const f=new URLSearchParams(b);const k=(f.get('k')||'').trim();
    let ok=false;if(/^[A-Za-z0-9-]{20,80}$/.test(k)){try{const r=await j(`${TB}/user/me`,H(k));ok=!!r.success;}catch{}}
    if(!ok){await new Promise(r=>setTimeout(r,1000));res.writeHead(401,{'content-type':'text/html'});return res.end(LOGIN('That TorBox API key was rejected.'));}
-   res.writeHead(302,{'Set-Cookie':COOKIE(seal({k,exp:Date.now()+30*864e5}),f.get('r')?2592000:null),Location:'/'});return res.end();}
+   res.writeHead(302,{'Set-Cookie':COOKIE(seal({k,exp:Date.now()+AGE*1e3}),AGE),Location:'/'});return res.end();}
   const IP=(String(req.headers['x-forwarded-for']||'').split(',')[0].trim())||'';const S=session(req);const K=S&&S.k;
   if(!S){if(u.pathname.startsWith('/api/'))return send(res,401,{error:'unauthorized'});res.writeHead(401,{'content-type':'text/html'});return res.end(LOGIN(0));}
   if(u.pathname=='/api/catalog'){const ex=q.genre?`/genre=${encodeURIComponent(q.genre)}`:'';
@@ -98,14 +103,17 @@ http.createServer(async(req,res)=>{const u=new URL(req.url,'http://x');const q=O
   if(u.pathname=='/api/sources')return send(res,200,{builtin:[{id:'tbsearch',name:'TorBox Search'},...Object.entries(BUILTIN).map(([id,v])=>({id,name:v.name}))],defaults:DEFAULT_SRC});
   if(u.pathname=='/api/validate-addon'){try{const b=await safeBase(q.url);const m=await fetch(b+'/manifest.json',{redirect:'error',signal:AbortSignal.timeout(8000)}).then(r=>r.json());
    return send(res,200,{ok:true,base:b,name:m.name||new URL(b).hostname,stream:(m.resources||[]).some(r=>r=='stream'||r?.name=='stream')});}catch(e){return send(res,200,{ok:false,error:String(e.message||e)})}}
-  if(u.pathname=='/api/play')return send(res,200,await play(K,q.hash,q.s,q.e,q.file,IP).then(d=>(d.status=='ok'&&(d.vlc=vlink(req,K,d.tid,d.fid,d.name)),d)));
+  if(u.pathname=='/api/play')return send(res,200,await play(K,q.hash,q.s,q.e,q.file,IP).then(d=>(d.status=='ok'&&Object.assign(d,links(req,K,d.tid,d.fid,d.name)),d)));
   if(u.pathname=='/api/library'){const r=await j(`${TB}/torrents/mylist?bypass_cache=true`,H(K));
-   return send(res,200,{items:(r.data||[]).map(t=>({id:t.id,hash:t.hash,name:t.name,size:t.size,state:t.download_state,ready:t.download_present,files:(t.files||[]).filter(f=>VID.test(f.name)).map(f=>({id:f.id,name:f.short_name,size:f.size}))}))});}
-  if(u.pathname=='/api/libplay'){const r=await j(`${TB}/torrents/requestdl?token=${encodeURIComponent(K)}&torrent_id=${q.tid}&file_id=${q.fid}&redirect=false`);return send(res,200,{status:r.success?'ok':'err',url:r.data,detail:r.detail,tid:q.tid,fid:q.fid,vlc:r.success?vlink(req,K,q.tid,q.fid,q.name):null});}
+   const tm=t=>Date.parse(t.updated_at||t.created_at||0)||0;
+   return send(res,200,{items:(r.data||[]).sort((a,b)=>tm(b)-tm(a)).map(t=>({id:t.id,hash:t.hash,name:t.name,size:t.size,state:t.download_state,ready:t.download_present,updated:t.updated_at||t.created_at,files:(t.files||[]).filter(f=>VID.test(f.name)).map(f=>({id:f.id,name:f.short_name,size:f.size}))}))});}
+  if(u.pathname=='/api/libplay'){const r=await j(`${TB}/torrents/requestdl?token=${encodeURIComponent(K)}&torrent_id=${q.tid}&file_id=${q.fid}&redirect=false`);return send(res,200,{status:r.success?'ok':'err',url:r.data,detail:r.detail,tid:q.tid,fid:q.fid,...(r.success?links(req,K,q.tid,q.fid,q.name):{})});}
   if(u.pathname=='/api/hls'){const r=await j(`${TB}/stream/createstream?id=${encodeURIComponent(q.tid)}&file_id=${encodeURIComponent(q.fid)}&type=torrent&chosen_audio_index=0&chosen_resolution_index=0`,H(K));
    return send(res,200,r.success&&r.data?.hls_url?{ok:true,hls:r.data.hls_url}:{ok:false,detail:r.detail||r.error||'Streaming unavailable'});}
-  const p=path.join(__dirname,'public',u.pathname=='/'?'index.html':path.normalize(u.pathname));
-  if(p.startsWith(path.join(__dirname,'public'))&&fs.existsSync(p)){res.writeHead(200,{'content-type':p.endsWith('.html')?'text/html':'text/plain'});return fs.createReadStream(p).pipe(res);}
+  const pub=path.join(__dirname,'public'),p=path.join(pub,u.pathname=='/'?'index.html':path.normalize(u.pathname));
+  if(p.startsWith(pub+path.sep)&&fs.existsSync(p)&&fs.statSync(p).isFile()){const ext=path.extname(p),hd={'content-type':MIME[ext]||'application/octet-stream','cache-control':ext=='.html'?'no-cache':'public, max-age=300'};
+   if(ext=='.html')hd['Set-Cookie']=COOKIE(seal({k:K,exp:Date.now()+AGE*1e3}),AGE);
+   res.writeHead(200,hd);return fs.createReadStream(p).pipe(res);}
   res.writeHead(404);res.end();
  }catch(err){send(res,500,{error:String(err.message||err)});}
 }).listen(PORT,'0.0.0.0',()=>console.log('SEF-FLIX on '+PORT));
